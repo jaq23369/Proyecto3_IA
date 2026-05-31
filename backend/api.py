@@ -1,13 +1,12 @@
-import time
 import uuid
-import random
-from typing import Any, Optional
+from typing import Any
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from game_engine import GameEngine, BLACK, WHITE
+from algorithms import get_best_move
+from game_engine import GameEngine
 
 app = FastAPI(title="Othello API", version="1.0.0")
 
@@ -126,31 +125,22 @@ def ai_move(game_id: str, body: AIMoveRequest):
     if not legal:
         raise HTTPException(status_code=400, detail="No hay movimientos disponibles para la IA")
 
-    start = time.perf_counter()
-    nodes_explored = 0
-    depth_reached = 0
-
-    # Usa los algoritmos de Integrante 2; movimiento aleatorio mientras no estén listos
     try:
-        from algorithms import get_best_move  # type: ignore
         result = get_best_move(engine, body.algorithm, body.depth)
-        move = result.move
-        nodes_explored = result.nodes_explored
-        depth_reached = result.depth_reached
-    except (ImportError, Exception):
-        move = random.choice(legal)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    elapsed_ms = (time.perf_counter() - start) * 1000
+    move = result.move
     engine.apply_move(move[0], move[1])
 
     metrics = {
         "move": list(move),
-        "algorithm": body.algorithm,
+        "algorithm": result.algorithm,
         "depth": body.depth,
-        "nodes_explored": nodes_explored,
-        "time_ms": round(elapsed_ms, 2),
-        "board_eval": round(engine.evaluate(), 2),
-        "depth_reached": depth_reached,
+        "nodes_explored": result.nodes_explored,
+        "time_ms": result.time_ms,
+        "board_eval": result.board_eval,
+        "depth_reached": result.depth_reached,
     }
     last_metrics[game_id] = metrics
 

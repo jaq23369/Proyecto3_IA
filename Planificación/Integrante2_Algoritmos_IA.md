@@ -1,7 +1,7 @@
 # Integrante 2 — Algoritmos de IA + Heurísticas
 
-**Área:** Inteligencia Artificial — motores de búsqueda y evaluación  
-**Inicia:** Cuando Integrante 1 entrega `GameEngine` con sus métodos base  
+**Área:** Inteligencia Artificial — motores de búsqueda y evaluación
+**Inicia:** Cuando Integrante 1 entrega `GameEngine` con sus métodos base
 **Archivo:** `backend/algorithms.py`
 
 ---
@@ -11,17 +11,20 @@
 Las heurísticas son la base de todos los algoritmos. Sin buenas heurísticas, ningún algoritmo jugará bien en Othello.
 
 ### Regla de oro
+
 > En Othello **no** gana quien tiene más piezas a mitad del juego — gana quien controla mejor el tablero. Las esquinas son casi imbatibles.
 
 ### Heurísticas a implementar
 
 #### H1 — Paridad de piezas
+
 ```python
 # Solo útil en endgame, engañosa en opening/midgame
 score = (mis_piezas - piezas_enemigas) / (mis_piezas + piezas_enemigas) * 100
 ```
 
 #### H2 — Movilidad
+
 ```python
 # Cuantos más movimientos tengo vs el enemigo, más control tengo
 mi_mov = len(engine.get_legal_moves())
@@ -30,6 +33,7 @@ score = (mi_mov - mov_enemigo) / (mi_mov + mov_enemigo + 1) * 100
 ```
 
 #### H3 — Control de esquinas
+
 ```python
 CORNERS = [(0,0), (0,7), (7,0), (7,7)]
 # Esquinas propias +25, esquinas enemigas -25
@@ -37,9 +41,11 @@ CORNERS = [(0,0), (0,7), (7,0), (7,7)]
 ```
 
 #### H4 — Estabilidad
+
 Fichas que **nunca** pueden ser volteadas (esquinas + bordes completos + fichas interiores estables). Son las más valiosas.
 
 #### H5 — Frontera (borde expuesto)
+
 Fichas propias adyacentes a casillas vacías son vulnerables. Penalizarlas.
 
 ### Heurística compuesta por fase
@@ -47,15 +53,15 @@ Fichas propias adyacentes a casillas vacías son vulnerables. Penalizarlas.
 ```python
 def evaluate(engine) -> float:
     phase = engine.get_phase()
-    
+  
     if phase == "opening":
         # Movilidad y esquinas dominan, ignorar conteo de piezas
         return 5*H3 + 3*H2 + 1*H4
-    
+  
     elif phase == "midgame":
         # Estabilidad se vuelve importante
         return 3*H3 + 2*H2 + 3*H4 + 1*H5
-    
+  
     else:  # endgame
         # Conteo de piezas es lo que importa al final
         return 2*H3 + 1*H2 + 2*H4 + 3*H1
@@ -76,12 +82,12 @@ def alpha_beta(engine, depth, alpha, beta, maximizing) -> tuple[float, tuple]:
 
 ### Optimizaciones a implementar
 
-| Optimización | Impacto | Descripción |
-|---|---|---|
-| Ordenamiento de movimientos | Alto | Evaluar esquinas primero, luego bordes, luego interiores |
-| Poda alfa-beta básica | Alto | No explorar ramas que no pueden mejorar el resultado |
-| Ventana de aspiración | Medio | Asumir una ventana estrecha y ampliar si falla |
-| Tabla de transposición | Alto | Cachear estados ya evaluados (dict con hash del tablero) |
+| Optimización               | Impacto | Descripción                                             |
+| --------------------------- | ------- | -------------------------------------------------------- |
+| Ordenamiento de movimientos | Alto    | Evaluar esquinas primero, luego bordes, luego interiores |
+| Poda alfa-beta básica      | Alto    | No explorar ramas que no pueden mejorar el resultado     |
+| Ventana de aspiración      | Medio   | Asumir una ventana estrecha y ampliar si falla           |
+| Tabla de transposición     | Alto    | Cachear estados ya evaluados (dict con hash del tablero) |
 
 ### Profundidades recomendadas por fase
 
@@ -104,6 +110,7 @@ def mcts(engine, time_limit_s=2.0, C=1.41) -> tuple[tuple, dict]:
 ```
 
 ### Fórmula UCT
+
 ```
 Score(nodo) = victorias/visitas + C × √(ln(visitas_padre) / visitas_nodo)
 ```
@@ -116,6 +123,7 @@ Score(nodo) = victorias/visitas + C × √(ln(visitas_padre) / visitas_nodo)
 4. **Retropropagación** — actualizar victorias/visitas hacia la raíz
 
 ### Mejora: rollout con heurística
+
 En lugar de movimientos completamente aleatorios en la simulación, usar la heurística H3 (esquinas) para guiar los rollouts. Mejora significativamente la calidad de MCTS.
 
 ---
@@ -156,11 +164,11 @@ Llevar contador de nodos como variable compartida dentro de la función de búsq
 
 ## Checklist de entrega
 
-- [ ] `evaluate()` compuesta con los 3 pesos por fase
-- [ ] `alpha_beta()` con poda funcional, límite de 2s respetado
-- [ ] `mcts()` con UCT, `C=1.41`, límite de 2s
-- [ ] `expectimax()` implementado (puede ser simplificado)
-- [ ] Ordenamiento de movimientos en alpha-beta (esquinas primero)
-- [ ] Tabla de transposición básica
-- [ ] `AIResult` retornado por todos los algoritmos con nodos y tiempo
-- [ ] Verificar que alpha-beta gana consistentemente al aleatorio
+- [X] `evaluate()` compuesta con los 3 pesos por fase
+- [X] `alpha_beta()` con poda funcional, límite de 2s respetado
+- [X] `mcts()` con UCT, `C=1.41`, límite de 2s
+- [X] `expectimax()` implementado (puede ser simplificado)
+- [X] Ordenamiento de movimientos en alpha-beta (esquinas primero)
+- [X] Tabla de transposición básica
+- [X] `AIResult` retornado por todos los algoritmos con nodos y tiempo
+- [X] Verificar que alpha-beta gana consistentemente al aleatorio
