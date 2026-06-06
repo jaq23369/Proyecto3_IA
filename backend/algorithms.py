@@ -50,6 +50,8 @@ def get_best_move(engine: GameEngine, algorithm: str = "alpha_beta", depth: int 
         return mcts(engine, time_limit_s=2.0)
     if normalized == "expectimax":
         return expectimax_search(engine, depth=depth)
+    if normalized == "minimax":
+        return minimax_search(engine, depth=depth)
     raise ValueError(f"Algoritmo no soportado: {algorithm}")
 
 
@@ -114,7 +116,7 @@ def alpha_beta_search(engine: GameEngine, depth: int = 6, time_limit_s: float = 
     best_value = -math.inf
     depth_reached = 0
     counters = {"nodes": 0}
-    transposition: dict[tuple, tuple[float, Optional[tuple[int, int]]]] = {}
+    transposition: dict[tuple, tuple[float, Optional[tuple[int, int]], str]] = {}
 
     for current_depth in range(1, target_depth + 1):
         try:
@@ -145,6 +147,48 @@ def alpha_beta_search(engine: GameEngine, depth: int = 6, time_limit_s: float = 
         algorithm="alpha_beta",
     )
 
+
+def minimax(
+    engine: GameEngine, depth: int, maximizing: bool = True
+) -> tuple[float, Optional[tuple[int, int]]]:
+    player = engine.current_player
+    value, move = _minimax_value(engine.copy(), depth, player, None, {"nodes": 0})
+    return (value, move) if maximizing else (-value, move)
+
+
+def minimax_search(engine: GameEngine, depth: int = 4, time_limit_s: float = 2.0) -> AIResult:
+    start = time.perf_counter()
+    deadline = start + time_limit_s
+    player = engine.current_player
+    legal = engine.get_legal_moves()
+    if not legal:
+        raise ValueError("No hay movimientos legales para evaluar")
+
+    target_depth = max(1, min(depth, 4))  # Minimax explota rápido, limitamos profundidad
+    best_move = _order_moves(engine, legal)[0]
+    best_value = -math.inf
+    depth_reached = 0
+    counters = {"nodes": 0}
+
+    for current_depth in range(1, target_depth + 1):
+        try:
+            value, move = _minimax_value(engine.copy(), current_depth, player, deadline, counters)
+            if move is not None:
+                best_value = value
+                best_move = move
+                depth_reached = current_depth
+        except _SearchTimeout:
+            break
+
+    elapsed_ms = (time.perf_counter() - start) * 1000
+    return AIResult(
+        move=best_move,
+        nodes_explored=counters["nodes"],
+        time_ms=round(elapsed_ms, 2),
+        board_eval=round(best_value if best_value != -math.inf else evaluate(engine, player), 2),
+        depth_reached=depth_reached,
+        algorithm="minimax",
+    )
 
 def mcts(engine: GameEngine, time_limit_s: float = 2.0, C: float = 1.41) -> AIResult:
     start = time.perf_counter()
@@ -226,7 +270,7 @@ def _alpha_beta_value(
     root_player: int,
     deadline: Optional[float],
     counters: dict[str, int],
-    transposition: dict[tuple, tuple[float, Optional[tuple[int, int]]]],
+    transposition: dict[tuple, tuple[float, Optional[tuple[int, int]], str]],
 ) -> tuple[float, Optional[tuple[int, int]]]:
     if deadline is not None and time.perf_counter() >= deadline:
         raise _SearchTimeout
@@ -234,7 +278,13 @@ def _alpha_beta_value(
     counters["nodes"] += 1
     key = (_board_key(engine), engine.current_player, depth)
     if key in transposition:
-        return transposition[key]
+        cached_value, cached_move, bound_type = transposition[key]
+        if bound_type == "EXACT":
+            return cached_value, cached_move
+        elif bound_type == "LOWER" and cached_value >= beta:
+            return cached_value, cached_move
+        elif bound_type == "UPPER" and cached_value <= alpha:
+            return cached_value, cached_move
 
     if depth == 0 or engine.is_terminal():
         value = evaluate(engine, root_player)
@@ -250,10 +300,11 @@ def _alpha_beta_value(
 
     maximizing = engine.current_player == root_player
     best_move: Optional[tuple[int, int]] = None
+    original_alpha = alpha
+    original_beta = beta
 
     if maximizing:
         value = -math.inf
-        pruned = False
         for move in _order_moves(engine, moves):
             child = engine.copy()
             child.apply_move(*move)
@@ -265,11 +316,9 @@ def _alpha_beta_value(
                 best_move = move
             alpha = max(alpha, value)
             if alpha >= beta:
-                pruned = True
                 break
     else:
         value = math.inf
-        pruned = False
         for move in _order_moves(engine, moves):
             child = engine.copy()
             child.apply_move(*move)
@@ -281,11 +330,62 @@ def _alpha_beta_value(
                 best_move = move
             beta = min(beta, value)
             if alpha >= beta:
-                pruned = True
                 break
 
-    if not pruned:
-        transposition[key] = (value, best_move)
+    if value <= original_alpha:
+        bound_type = "UPPER"
+    elif value >= original_beta:
+        bound_type = "LOWER"
+    else:
+        bound_type = "EXACT"
+
+    transposition[key] = (value, best_move, bound_type)
+    return value, best_move
+
+
+def _minimax_value(
+    engine: GameEngine,
+    depth: int,
+    root_player: int,
+    deadline: Optional[float],
+    counters: dict[str, int],
+) -> tuple[float, Optional[tuple[int, int]]]:
+    if deadline is not None and time.perf_counter() >= deadline:
+        raise _SearchTimeout
+
+    counters["nodes"] += 1
+
+    if depth == 0 or engine.is_terminal():
+        return evaluate(engine, root_player), None
+
+    moves = engine.get_legal_moves()
+    if not moves:
+        passed = engine.copy()
+        passed.current_player = -passed.current_player
+        return _minimax_value(passed, depth - 1, root_player, deadline, counters)
+
+    maximizing = engine.current_player == root_player
+    best_move: Optional[tuple[int, int]] = None
+
+    if maximizing:
+        value = -math.inf
+        for move in _order_moves(engine, moves):
+            child = engine.copy()
+            child.apply_move(*move)
+            score, _ = _minimax_value(child, depth - 1, root_player, deadline, counters)
+            if score > value:
+                value = score
+                best_move = move
+    else:
+        value = math.inf
+        for move in _order_moves(engine, moves):
+            child = engine.copy()
+            child.apply_move(*move)
+            score, _ = _minimax_value(child, depth - 1, root_player, deadline, counters)
+            if score < value:
+                value = score
+                best_move = move
+
     return value, best_move
 
 
